@@ -22,7 +22,7 @@
 #include <PubSubClient.h>
 #include <Wire.h>
 
-//#define DEBUG 1                           //Use this in debugging environment only  
+#define DEBUG 1                           //Use this in debugging environment only  
 
 #define WIFI_SSID "HWLAN"                   //WIFI SSID of your NETWORK
 #define WIFI_PASSWORD "1234567890123456"    //WIFI Password of your NETWORK
@@ -40,8 +40,76 @@ PubSubClient client(espClient);             //Connection to MQTT Server
 float watt = 0.0f;
 char watt_s[7];
 
+boolean wifi_established = false;
+boolean mqtt_established = false;
+
 //display object - uses the u8g2 lib
 U8G2_SH1106_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, 12, 13);
+
+const uint8_t wlanSymbol[] = {
+0b00001111, 
+0b00010000, 
+0b00100111, 
+0b01001000, 
+0b01010011, 
+0b10100100, 
+0b10101001, 
+0b10101011, 
+};
+const uint8_t wlanSymbol1[] = {
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000001, 
+0b00000011, 
+};
+const uint8_t wlanSymbol2[] = {
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000000, 
+0b00000011, 
+0b00000100, 
+0b00001001, 
+0b00001011, 
+};
+const uint8_t wlanSymbol3[] = {
+0b00000000, 
+0b00000000, 
+0b00000111, 
+0b00001000, 
+0b00010011, 
+0b00100100, 
+0b00101001, 
+0b00101011, 
+};
+
+unsigned long timeelapsed = 0;
+unsigned long timeframestart = 0;
+unsigned int frame = 0;
+
+void drawAnimatedWLANSymbol() {
+  timeelapsed = millis() - timeframestart;
+  if (frame == 1) {
+    u8g2.drawBitmap( 0, 0, 1, 8, wlanSymbol1);
+  }
+  if (frame == 2) {
+    u8g2.drawBitmap( 0, 0, 1, 8, wlanSymbol2);
+  }
+  if (frame == 3) {
+    u8g2.drawBitmap( 0, 0, 1, 8, wlanSymbol3);
+  }
+  if (frame == 4) {
+    u8g2.drawBitmap( 0, 0, 1, 8, wlanSymbol);
+  }
+}
+
+void drawWLANSymbol() {
+    u8g2.drawBitmap( 0, 0, 1, 8, wlanSymbol);
+}
 
 /************************************
  function setup                  
@@ -55,8 +123,8 @@ U8G2_SH1106_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, 12, 13);
 ************************************/
 void setup(void) {
   Serial.begin(SERIAL_BAUD_RATE);   //initialize the Serial object with speed of SERIAL_BAUD_RATE
-  setup_wifi();                     //initialize the wifi connection
-  client.setServer(MQTT_SERVER_IP, MQTT_PORT);  //initialize the connection to the mqtt_server
+  //setup_wifi();                     //initialize the wifi connection
+  //client.setServer(MQTT_SERVER_IP, MQTT_PORT);  //initialize the connection to the mqtt_server
   u8g2.begin();
 }
 /************************************
@@ -121,30 +189,28 @@ void setup_wifi() {
  return none                     
 ************************************/
 void reconnect() {
-  while (!client.connected()) {                         //try until connected
+  #ifdef DEBUG
+    Serial.println("Attempting MQTT connection...");
+  #endif
+  if (client.connect(MQTT_CLIENT_NAME)) {                  //client should connect
+    mqtt_established = true;
     #ifdef DEBUG
-      Serial.println("Attempting MQTT connection...");
+      Serial.println("connected");
     #endif
-    if (client.connect(MQTT_CLIENT_NAME)) {                  //client should connect
-      #ifdef DEBUG
-        Serial.println("connected");
-      #endif
-      client.setCallback(update);
-      boolean rc = client.subscribe("home/techroom/mz/analog");   //subscribe the topic to follow
-      #ifdef DEBUG
-        if (rc) {
-           Serial.println("subscripted topic");      
-        }
-      #endif
-    } else {
-      #ifdef DEBUG
-        Serial.print("failed, rc=");
-        Serial.print(client.state());
-        Serial.println(" try again in 5 seconds");
-      #endif
-      // Wait 2 seconds before retrying
-      delay(2000);
-    }
+    client.setCallback(update);
+    boolean rc = client.subscribe("home/techroom/mz/analog");   //subscribe the topic to follow
+    #ifdef DEBUG
+      if (rc) {
+         Serial.println("subscripted topic");      
+      }
+    #endif
+  } else {
+    mqtt_established = false;
+    #ifdef DEBUG
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+    #endif
   }
 }
 
@@ -158,16 +224,34 @@ void reconnect() {
  return none                     
 ************************************/
 void loop(void) {
-  if (!client.connected()) {    //if connection is lost, reconnect
-    reconnect();
+  timeframestart = millis();
+  u8g2.clearBuffer();  
+  if (wifi_established) {
+    drawWLANSymbol();
+  } else {
+    drawAnimatedWLANSymbol();
   }
-  client.loop();                //mqtt loop
+  if (mqtt_established) {
+    u8g2.setFont(u8g2_font_profont12_tf);  // choose a suitable font
+    u8g2.drawStr(12, 8, "MQTT");    
+  } else {
+    if (frame % 3 == 0) {
+      u8g2.setFont(u8g2_font_profont12_tf);  // choose a suitable font
+      u8g2.drawStr(12, 8, "MQTT");
+    }
+  }
   dtostrf(watt, 6, 0, watt_s);  //convert watts to string
-  u8g2.clearBuffer();					  // clear the internal memory
   u8g2.setFont( u8g2_font_logisoso22_tf);	// choose a suitable font
   u8g2.drawStr(0, 44, watt_s);  //draw watts as a string on display
   u8g2.drawStr(100, 44, "W");   //and the unit behing
   u8g2.sendBuffer();					  // transfer internal memory to the display
-  delay(500);                  //do this ever 500ms
+  if (!client.connected()) {    //if connection is lost, reconnect
+    reconnect();
+  } else {
+    client.loop();                //mqtt loop
+  }
+  frame++;
+  if (frame >= 5) frame = 0;
+  timeelapsed = millis();
 }
 
