@@ -1,9 +1,9 @@
 /************************************************************
  mz_display code                   
- V1.0.0                          
- (c) 2016 hofmann engineering    
+ V1.2.0                          
+ (c) 2017 hofmann engineering    
                                  
- So this code will run on an Adafruit 
+ So this code will run on an Adafruit (Feather)
  HUZZAH ESP8266 Board. To program the board do:
    (1) Hold down the GPIO0 button, the red LED will be lit
    (2) While holding down GPIO0, click the RESET button
@@ -13,7 +13,7 @@
  Upload Speed is 115200 baud.
 
  This program puts the watt usage of our house, coming from a
- mqtt server on a sh1106 display.
+ mqtt server on any u8g2lib compatible display.
 *************************************************************/  
 #include <Arduino.h>
 #include <U8g2lib.h>
@@ -184,7 +184,7 @@ void loop(void) {
   if (!client.connected()) {    //if connection is lost, reconnect
     reconnect();
   } else {
-    client.loop();                //mqtt loop
+    client.loop();              //mqtt loop
   }
 
   render();
